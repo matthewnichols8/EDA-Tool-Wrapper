@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
 from pathlib import Path
+from abc import ABC, abstractmethod
+import logging
 
 class ToolStatus(Enum):
     """ Displays the Tool's Current Status """
@@ -75,6 +77,29 @@ class PowerReport():
             result += str(table[0]) + ": " + str(table[1]) + "mW\n"
         return result
 
+class EDAToolBase(ABC):
+    """Implements all shared infrastructure"""
 
+    def __init__(self, work_dir : str|Path, *, timeout : int = 3600):
+        """" Constructor for EDAToolBase """
+        # Resolve work_dir to an abs Path
+        self.work_dir = Path(work_dir).resolve()
+        self.work_dir.mkdir(parents=True, exist_ok=True)
 
+        # Set self.timeout for subprocess calls
+        self.timeout = timeout
+        # Initialise self._results as an empty list[RunResult]
+        self._results = []
+        # Configure a logger with both a StreamHandler (INFO level) and FileHandler (Debug level)
+        self._logger = logging.getLogger(__name__)
+        self._logger.setLevel(logging.DEBUG)
 
+        # Make StreamHandler
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        self._logger.addHandler(ch)
+
+        # Make FileHandler
+        fh = logging.FileHandler(self.work_dir / f"{self._tool_name()}.log")
+        fh.setLevel(logging.DEBUG)
+        self._logger.addHandler(fh)
