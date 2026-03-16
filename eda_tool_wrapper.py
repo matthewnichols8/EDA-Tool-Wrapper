@@ -39,6 +39,26 @@ class RunResult():
         else:
             self.status = ToolStatus.ERROR
 
+@dataclass
+class SynthesisReport():
+    timing_slack_ns: Optional[float] = None # worst negative slack (ns)
+    total_area : Optional[float] = None # total cell area
+    cell_count : Optional[int] = None # number of cells in the synthesised design
+    dynamic_power_mw : Optional[float] = None # total dynamic power in mW
+    leakage_power_uw : Optional[float] = None# total leakage power in uW
+    raw_timing : str = "" # Text Report for Debugging
+    raw_area : str = "" # Text Report for Debugging
+    raw_power : str = "" # Text Report for Debugging    
+
+    def summary(self):
+        return f"""
+                Slack: {self.timing_slack_ns} ns
+                Area:  {self.total_area}
+                Cell Count: {self.cell_count}
+                Dynamic Power: {self.dynamic_power_mw} mW
+                Leakage Power: {self.leakage_power_uw} uW
+                """
+
 
 
 
