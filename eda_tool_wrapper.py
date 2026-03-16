@@ -41,6 +41,7 @@ class RunResult():
 
 @dataclass
 class SynthesisReport():
+    """ Dataclass for Synthesis Report """
     timing_slack_ns: Optional[float] = None # worst negative slack (ns)
     total_area : Optional[float] = None # total cell area
     cell_count : Optional[int] = None # number of cells in the synthesised design
@@ -58,6 +59,21 @@ class SynthesisReport():
                 Dynamic Power: {self.dynamic_power_mw} mW
                 Leakage Power: {self.leakage_power_uw} uW
                 """
+
+@dataclass
+class PowerReport():
+    """ Dataclass for Power Report """
+    total_power_mw : Optional[float] = None # total power in mW
+    dynamic_power_mw : Optional[float] = None # dynamic power in mW
+    leakage_power_mw: Optional[float] = None # leakage power in mW
+    top_consumers : list[tuple[str, float]] = field(default_factory=list) # (module_name, power_mw) pairs
+    raw : str = "" # Full Raw Report Rext
+
+    def summary(self):
+        result = ""
+        for table in self.top_consumers[:10]:
+            result += str(table[0]) + ": " + str(table[1]) + "mW\n"
+        return result
 
 
 
