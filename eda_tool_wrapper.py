@@ -4,6 +4,9 @@ from typing import Optional
 from pathlib import Path
 from abc import ABC, abstractmethod
 import logging
+import shutil
+import time
+import subprocess
 
 class ToolStatus(Enum):
     """ Displays the Tool's Current Status """
@@ -91,7 +94,7 @@ class EDAToolBase(ABC):
         # Initialise self._results as an empty list[RunResult]
         self._results = []
         # Configure a logger with both a StreamHandler (INFO level) and FileHandler (Debug level)
-        self._logger = logging.getLogger(__name__)
+        self._logger = logging.getLogger(__name__)  
         self._logger.setLevel(logging.DEBUG)
 
         # Make StreamHandler
@@ -103,3 +106,87 @@ class EDAToolBase(ABC):
         fh = logging.FileHandler(self.work_dir / f"{self._tool_name()}.log")
         fh.setLevel(logging.DEBUG)
         self._logger.addHandler(fh)
+    
+    @abstractmethod
+    def _executable(self) -> str: ...  
+
+    @abstractmethod
+    def _tool_name(self) -> str: ...
+
+    def _run(self, tcl_script: str | Path, extra_args: list[str] | None = None) -> RunResult:
+        """ Method to run EDA Tool Wrapper """
+        # 1.	Resolve tcl_script to a Path and raise FileNotFoundError if it does not exist
+        # 2.	Call shutil.which(self._executable()) and raise EnvironmentError if the binary is not in PATH
+        # 3.	Build the command list: [executable, '-f', str(tcl_script)] plus any extra_args
+        # 4.	Record the start time with time.perf_counter()
+        # 5.	Log the start of the invocation at INFO level
+        # 6.	Call subprocess.run() with capture_output=True, text=True, cwd=self.work_dir, timeout=self.timeout
+        # 7.	Catch subprocess.TimeoutExpired — log an error and construct a RunResult with returncode=-1
+        # 8.	Catch any other exception and re-raise as a RuntimeError with context
+        # 9.	Compute elapsed time, construct and append a RunResult to self._results
+        # 10.	Log the result summary at INFO or ERROR level based on RunResult.ok
+        # 11.	Return the RunResult
+
+        tcl_script_p = Path(tcl_script).resolve()
+        if not tcl_script_p.exists():
+            raise FileNotFoundError(f"Tcl Script does not exist {tcl_script_p}")
+
+        if not shutil.which(self._executable()):
+            raise EnvironmentError(f"The executable is not in the PATH: {self._executable()}")
+
+        cmd = [self._executable(), '-f', str(tcl_script)]
+        if extra_args:
+            cmd += extra_args
+        
+        start_time = time.perf_counter()
+        self._logger.info(f"Starting {self._tool_name()} running {cmd}")
+
+        # Subprocess run
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=self.work_dir,
+                timeout=self.timeout
+            )
+
+        # Excpetion for Timeout
+        except subprocess.TimeoutExpired:
+            self._logger.error("Timeout Expired")
+            result = RunResult(
+                tool=self._tool_name(),
+                command=" ".join(cmd),
+                returncode=-1,
+                stdout="",
+                stderr="",
+                elapsed=time.perf_counter()-start_time,
+                log_file=self.work_dir / f"{self._tool_name()}.log"
+            )
+            return result
+
+        # General Exception
+        except Exception as e:
+            raise RuntimeError(f"Non-Timeout Error: {self._tool_name()} caused error {e}") from e
+
+        # Add Run Result to self._results
+        elapsed_time = time.perf_counter() - start_time
+        new_result = RunResult(
+            tool=self._tool_name(),
+            command=" ".join(cmd),
+            returncode=result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            elapsed=elapsed_time,
+            log_file=self.work_dir / f"{self._tool_name()}.log"
+        )
+        self._results.append(new_result)
+
+        # Log Result Summary at INFO or ERROR
+        if new_result.ok:
+            self._logger.info(str(new_result))
+        else:
+            self._logger.error(str(new_result))
+
+        return new_result
+
