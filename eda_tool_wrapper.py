@@ -190,3 +190,43 @@ class EDAToolBase(ABC):
 
         return new_result
 
+class DesignCompiler(EDAToolBase):
+    def _executable(self) -> str:
+        return "dcnxt_shell"
+    
+    def _tool_name(self) -> str:
+        return "Design Compiler"
+
+    def run_synthesis(self, rtl:  str | Path, sdc: str | Path, top_module: str = 'top')-> RunResult:
+        """Run Synthesis Using Design Compiler"""
+
+        # Check RTL Path
+        rtl_script_p = Path(rtl).resolve()
+        if not rtl_script_p.exists():
+            raise FileNotFoundError(f"RTL Path does not exist {rtl_script_p}")
+        
+        # Check SDC Path
+        sdc_script_p = Path(sdc).resolve()
+        if not sdc_script_p.exists():
+            raise FileNotFoundError(f"SDC Path does not exists {sdc_script_p}")
+        
+        # Make Reports Directory
+        self.reports_dir = (self.work_dir / 'reports').resolve()
+        self.reports_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate Tcl Script
+        tcl_path = self.work_dir / 'run_synthesis.tcl'
+        tcl_content = f'''
+        set_app_var search_path [list {rtl_script_p.parent}]
+        analyze -format verilog {rtl_script_p.name}
+        elaborate {top_module}
+        source {sdc_script_p}
+        compile_ultra
+        report_timing > reports/timing.rpt
+        report_area   > reports/area.rpt
+        report_power  > reports/power.rpt
+        exit
+        '''
+        tcl_path.write_text(tcl_content)
+
+        return self._run(tcl_path)
